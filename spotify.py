@@ -15,6 +15,7 @@ class Spotify(module.Module):
 		self.client_id = self.config["client_id"]
 		self.client_secret = self.config["client_secret"]
 		self.redirect_uri = "http://localhost:8888/"
+		self.message_object = []
 
 	async def create_playlist(self, name):
 		# Holds the information you want to put in your playlist upon creation.
@@ -124,6 +125,7 @@ class Spotify(module.Module):
 
 	async def message(self, event):
 		message = event.get_message()
+
 		if message.is_command():
 			command, args = message.get_command_song()
 			if command == "spotifysonginfo":
@@ -207,18 +209,22 @@ class Spotify(module.Module):
 		if temp:
 			await self.add_track_to_playlist(message, playlistid, event)
 
+
 	async def create_weekly_playlist(self, currentdate, currentdayofweek, event):
 		message = event.get_message()
+
 		# If it is Friday
 		if currentdayofweek == 4:
 			# If the playlist is already initialized for the channel
-			if len(self.data) == 6:
+			if len(self.data) == 7:
 				# If there already exists a playlist, but it is a week from now, post the playlist.
 				if self.data[2] and currentdate == self.data[3]:
-					await event.send("Sandcaaat's Weekly Round-Up! \n {}".format(self.data[2]))
+					await event.reply("Sandcaaat's Weekly Round-Up! \n {}".format(self.data[2]))
 					# If this isn't the first time a playlist was created and pinned, it will unpin the last.
 					if self.data[5]:
-						await discord.Message.unpin(self.data[5])
+						test_channel = event.get_bot().raw().get_channel(id=self.data[6])
+						msg = await test_channel.fetch_message(self.data[5])
+						await discord.Message.unpin(msg)
 				# If it is the week after creating the playlist, create a new one and update when the next
 				# playlist should post
 				if currentdate == self.data[3] or self.data[3] == 0:
@@ -239,21 +245,26 @@ class Spotify(module.Module):
 					self.data[4] = playlist_info["id"]
 
 					# Post the new link to the channel
-					playlist_message = await message.send("{}".format(spotify_link))
+					playlist_message = await message.reply("{}".format(spotify_link))
+					print(playlist_message, "playlist_message")
 					message_id = playlist_message
 					self.data[5] = message_id.id
+					self.data[6] = message_id.channel.id
+					self.message_object = message_id
+					print(self.message_object, "message object")
 					# Pin new playlist to channel
 					pin = await discord.Message.pin(message_id)
 			# If a playlist hasn't been made for the channel yet there will only be 2 self.data entries
-			if len(self.data) < 6:
+			if len(self.data) < 7:
 				next_week = currentdate + timedelta(days=7)
 				created_playlist = await self.create_playlist(
 					"Forte Posts From {} ".format(currentdate))
 				# Check for an error creating the playlist.
 				temp = await self.refresh_token_check(created_playlist, event=event)
 				if temp:
-					await self.create_weekly_playlist(currentdate, currentdayofweek, event)
+					created_playlist = await self.create_playlist("Forte Posts From {} ".format(currentdate))
 				playlist_info = json.loads(created_playlist.text)
+				print(playlist_info, "playlist info")
 				spotify_link = playlist_info["external_urls"]["spotify"]
 				# Since this is the first time creating the playlist we need to append these to our list.
 				self.data.append(spotify_link)
@@ -263,7 +274,9 @@ class Spotify(module.Module):
 				playlist_message = await message.send("{}".format(spotify_link))
 
 				message_id = playlist_message
-				print(message_id.id, "message id")
-				print(message_id, "message id details")
+
 				self.data.append(message_id.id)
+				self.data.append(message_id.channel.id)
+				self.message_object = message_id
+
 				pin = await discord.Message.pin(message_id)
